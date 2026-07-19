@@ -5,17 +5,22 @@ const PORT = 3000;
 const API_URL = 'https://api.aladhan.com/v1/timingsByCity/19-07-2026?city=Mataram&country=Indonesia&method=11';
 
 let timings = {};
+let lastFetch = 0;
+const TTL = 3600000;
 
-const fetchTimings = async () => {
+async function getTimings() {
+  const now = Date.now();
+  if (Object.keys(timings).length && now - lastFetch < TTL) return timings;
   try {
     const res = await fetch(API_URL);
     const data = await res.json();
     timings = data.data.timings;
-    console.log('Timings fetched:', timings);
+    lastFetch = now;
   } catch (err) {
-    console.error('Failed to fetch timings:', err.message);
+    console.error('Fetch failed:', err.message);
   }
-};
+  return timings;
+}
 
 const map = {
   subuh: 'Fajr',
@@ -26,12 +31,17 @@ const map = {
 };
 
 Object.entries(map).forEach(([endpoint, key]) => {
-  app.get(`/${endpoint}`, (req, res) => {
-    res.send(timings[key]);
+  app.get(`/${endpoint}`, async (req, res) => {
+    await getTimings();
+    res.send(timings[key] || '');
   });
 });
 
-app.listen(PORT, () => {
-  fetchTimings();
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    getTimings();
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
